@@ -1,0 +1,12 @@
+{
+  "name": "ltisource_ltipseudonym-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Two-site (A platform, B tool) end-to-end tests for ltisource_ltipseudonym.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}
