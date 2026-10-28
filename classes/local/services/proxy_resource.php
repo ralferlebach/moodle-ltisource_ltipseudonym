@@ -37,6 +37,15 @@ trait proxy_resource {
     }
 
     /**
+     * The values of the path template of the current request (context_id, item_id, tool_code, link_id ...).
+     *
+     * @return string[]
+     */
+    public function request_params(): array {
+        return $this->parse_template();
+    }
+
+    /**
      * Authenticate the bearer token before the core resource does, to learn which tool the request belongs to.
      *
      * The core resource authenticates again; a failure here is not an answer, core answers it (401).
@@ -52,6 +61,19 @@ trait proxy_resource {
         }
         $type = $this->get_service()->get_type();
         return ($type && !empty($type->id)) ? $type : null;
+    }
+
+    /**
+     * Replace a status that is not a valid HTTP status (core answers some exceptions with code 0) by 500, empty body.
+     *
+     * @param \mod_lti\local\ltiservice\response $response
+     */
+    protected function normalise_code($response): void {
+        $code = (int) $response->get_code();
+        if ($code < 100 || $code > 599) {
+            $response->set_code(500);
+            $response->set_body('');
+        }
     }
 
     /**

@@ -35,6 +35,7 @@ class linkmemberships extends \ltiservice_memberships\local\resources\linkmember
      */
     public function execute($response) {
         parent::execute($response);
+        $this->normalise_code($response);
         if ($response->get_code() !== 200) {
             return;
         }

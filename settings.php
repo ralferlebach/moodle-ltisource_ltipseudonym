@@ -48,6 +48,16 @@ if ($ADMIN->fulltree) {
         get_string('legacyenabled_desc', $component),
         0
     ));
+    $settings->add(new admin_setting_configselect(
+        'ltisource_ltipseudonym/legacyprotocol',
+        get_string('legacyprotocol', $component),
+        get_string('legacyprotocol_desc', $component),
+        'pass',
+        [
+            'pass' => get_string('legacyprotocol:pass', $component),
+            'refuse' => get_string('legacyprotocol:refuse', $component),
+        ]
+    ));
     $settings->add(new admin_setting_configtext(
         'ltisource_ltipseudonym/retireddays',
         get_string('retireddays', $component),

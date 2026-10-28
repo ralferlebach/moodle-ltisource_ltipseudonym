@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.3.0 (alpha), 2026-10-27
+
+Version `2026102700`. Family audit 2026-10-27 (development branch), items SP-01 to SP-04.
+
+### Added
+* **Request guard** (core hook `\core\hook\after_config`, `classes/local/request_guard.php`):
+  * direct calls of core's `mod/lti/services.php` for the roster, scores or results of a tool with an active policy are
+    answered by the service proxy (closes the bypass: a tool could read the full roster with names and local ids, or score a
+    guessed local id, through the predictable core URL);
+  * a launch or deep-linking request that the policy will refuse is predicted (dry run of the real core request builder, no
+    mapping created) and refused **before** core posts the OIDC login initiation, so no `login_hint` reaches the tool.
+* **Request binding** (SP-03): the translator refuses coordinates that do not belong together (tool not available in the
+  course, activity of another course or tool); context rosters with an `rlid` of another course/tool answer 404 before core
+  runs; invalid status codes of core (0) are answered 500 with an empty body.
+* `translator::API_VERSION` (2) and `translator::pseudonym_of()` (contract for local_lticompletionsync and diagnostics).
+* Setting **`legacyprotocol`** (`pass` | `refuse`): LTI 1.0/1.1 launches are not covered by the policies; `refuse` refuses them
+  while the policy of their position is active. The overview lists LTI 1.x registrations as not covered.
+* **Safe exit path from the 0.1.0 alpha** (SP-04): `cli/import_scopedidentity.php` (dry run by default, `--execute`,
+  `--policies`) imports the pseudonym map of `ltisource_scopedidentity` before the old plugin is uninstalled.
+* Overview: per category the real effect (sent / sent empty / absent / launch refused / depends on the activity); never
+  "removed" for a claim core still sends. The four outcomes pass / blank / remove / refuse are explained in the form and the
+  overview (en, de).
+* Generated evidence: `docs/DISCLOSURE_TRACE.md` + `tests/fixtures/disclosure_trace.json` (PHPUnit protocol capture per LTI
+  version, scope and policy mode) and `tests/fixtures/disclosure_trace_e2e.json` (browser/HTTP capture on the two-site stack,
+  A = 4.5 and B = 5.3 as platform); `docs/SECURITY_PROTOCOL.md` + `tests/fixtures/security_protocol.json` (negative security
+  protocol).
+* Tests: `disclosure_trace_test`, `security_protocol_test`, `request_guard_test`, `claim_diff_test`, `legacy_import_test`,
+  upgrade tests; Playwright `disclosure_capture.spec.js`.
+
+### Changed
+* Product promise documented as limited (DOCUMENTATION "Product promise"): pseudonymised id token and services, not end-to-end
+  pseudonymity (`login_hint` core gate open; evaluated fork-free workarounds rejected; upstream hook proposed).
+* `launchrefused` no longer claims that "no identifier was sent" (the login initiation may have been sent when the refusal
+  could not be predicted); it says that no id token or launch data was sent.
+* A deep-linking request of an identified LTI 1.x registration follows the LTI 1.x rule instead of the "unidentifiable tool"
+  rule.
+
+### Upgrade
+* From `2026102502` (0.2.0): writes `legacyprotocol = pass` unless set; no schema change.
+
 ## 0.2.0 (alpha), 2026-10-25
 
 ### Post-rename cleanup (2026-10-25, version unchanged)

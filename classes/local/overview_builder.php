@@ -50,6 +50,49 @@ class overview_builder {
     }
 
     /**
+     * What a launch really carries for a disclosure value, given what core builds for the tool registration (SP-04).
+     *
+     * The overview never says "removed" for a claim core still sends: that is a refused launch.
+     *
+     * @param string $mode pass, blank or remove
+     * @param string|null $verdict claim_guard verdict (SENDS, MAYBE, NOT_SENT), null for the site default
+     * @return string effect code (lang string effect:<code>)
+     */
+    public static function effect(string $mode, ?string $verdict): string {
+        if ($verdict === null) {
+            return 'depends';
+        }
+        if ($verdict === claim_guard::NOT_SENT) {
+            return $mode === catalogue::DISC_REMOVE ? 'absent' : 'notsent';
+        }
+        $maybe = ($verdict === claim_guard::MAYBE) ? 'maybe' : '';
+        switch ($mode) {
+            case catalogue::DISC_REMOVE:
+                return 'refused' . $maybe;
+            case catalogue::DISC_BLANK:
+                return 'sentempty' . $maybe;
+            default:
+                return 'sent' . $maybe;
+        }
+    }
+
+    /**
+     * Tool registrations of LTI 1.0/1.1/2.0, which the policies do not cover (specification SP-L05).
+     *
+     * @return string[] type id => display name
+     */
+    public static function legacy_types(): array {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/mod/lti/locallib.php');
+        $types = $DB->get_records_select('lti_types', 'ltiversion <> :v', ['v' => LTI_VERSION_1P3], 'name ASC, id ASC', 'id, name');
+        $result = [];
+        foreach ($types as $type) {
+            $result[(int) $type->id] = format_string($type->name);
+        }
+        return $result;
+    }
+
+    /**
      * Summary of one level-1 policy.
      *
      * @param int $typeid 0 for the site default
@@ -67,12 +110,17 @@ class overview_builder {
             claim_guard::core_sends($typeconfig, 'result') !== claim_guard::NOT_SENT;
         $blanked = [];
         $removed = [];
+        $effects = [];
         foreach (catalogue::DISCLOSURES as $category) {
             $mode = $eff->{catalogue::disclosure_field($category)};
             if ($mode === catalogue::DISC_BLANK) {
                 $blanked[] = $category;
             } else if ($mode === catalogue::DISC_REMOVE) {
                 $removed[] = $category;
+            }
+            if ($mode !== catalogue::DISC_PASS) {
+                $effects[$category] = ['mode' => $mode, 'effect' => self::effect($mode, $typeid > 0 ?
+                    claim_guard::core_sends($typeconfig, $category) : null)];
             }
         }
         $stored = policy_manager::get_row($typeid);
@@ -83,6 +131,7 @@ class overview_builder {
             'scopetype' => $eff->scopetype,
             'blanked' => $blanked,
             'removed' => $removed,
+            'effects' => $effects,
             'conflicts' => $typeid > 0 ? claim_guard::conflicts($eff, $typeconfig) : [],
             'services' => $services,
             'viaproxy' => policy_manager::is_active($eff) && $services,

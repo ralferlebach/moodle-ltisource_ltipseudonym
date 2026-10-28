@@ -44,6 +44,21 @@ class config {
         return !empty(get_config(self::COMPONENT, 'legacyenabled'));
     }
 
+    /** @var string LTI 1.x launches are delivered unchanged (not covered, listed in the overview). */
+    public const LEGACY_PROTOCOL_PASS = 'pass';
+    /** @var string LTI 1.x launches are refused while the effective policy of their position is active. */
+    public const LEGACY_PROTOCOL_REFUSE = 'refuse';
+
+    /**
+     * How launches of LTI 1.0/1.1/2.0 tools are treated (the policies cover LTI 1.3 only).
+     *
+     * @return string LEGACY_PROTOCOL_PASS or LEGACY_PROTOCOL_REFUSE
+     */
+    public static function legacy_protocol(): string {
+        $value = get_config(self::COMPONENT, 'legacyprotocol');
+        return ($value === self::LEGACY_PROTOCOL_REFUSE) ? self::LEGACY_PROTOCOL_REFUSE : self::LEGACY_PROTOCOL_PASS;
+    }
+
     /**
      * Days after which retired mappings are purged by the scheduled task (0 keeps them forever).
      *

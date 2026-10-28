@@ -1,0 +1,322 @@
+{
+    "format": 1,
+    "cases": [
+        {
+            "id": "C1",
+            "attack": "legitimate score: the pseudonym of the launch, the line item of the launch, the token of the tool",
+            "expected": "stored for the right person",
+            "control": true,
+            "outcome": "200, grade of the launching person: stored",
+            "grades": "changed"
+        },
+        {
+            "id": "C2",
+            "attack": "legitimate roster of the tool in its course",
+            "expected": "pseudonyms only, no names or e-mail",
+            "control": true,
+            "answered_by": "proxy",
+            "code": 200,
+            "body": "pseudonyms",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S01",
+            "attack": "score with the pseudonym of the same person issued to ANOTHER tool (foreign token)",
+            "expected": "404, nothing stored, audit reason \"tool\"",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S02",
+            "attack": "score with the pseudonym of the same tool for ANOTHER course (scope mismatch)",
+            "expected": "404, nothing stored, audit reason \"scope\"",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S03",
+            "attack": "score with a guessed LOCAL user id at the proxy URL",
+            "expected": "404, nothing stored",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S04",
+            "attack": "score with a guessed LOCAL user id at the CORE URL (bypass of the proxy)",
+            "expected": "request guard answers with the proxy: 404, nothing stored",
+            "control": false,
+            "answered_by": "guard",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S05",
+            "attack": "roster at the CORE URL (bypass of the proxy and of the disclosure policy)",
+            "expected": "request guard answers with the proxy: pseudonyms only, no names or e-mail",
+            "control": true,
+            "answered_by": "guard",
+            "code": 200,
+            "body": "pseudonyms",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S06",
+            "attack": "roster with rlid of an activity of ANOTHER tool in the same course",
+            "expected": "404, empty body",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S07",
+            "attack": "roster of course 1 with rlid of an activity in ANOTHER course",
+            "expected": "404, empty body",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S08",
+            "attack": "link roster of an activity of ANOTHER tool, at the proxy",
+            "expected": "refused by core authentication (the link belongs to the other tool), empty body",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 403,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S09",
+            "attack": "link roster of an activity of ANOTHER tool, at the core URL",
+            "expected": "refused (guard routes to the proxy, core authentication refuses)",
+            "control": false,
+            "answered_by": "guard",
+            "code": 403,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S10",
+            "attack": "score on the line item of ANOTHER tool with a valid pseudonym of this tool",
+            "expected": "refused, nothing stored",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S11",
+            "attack": "roster with the token of this tool for the path of ANOTHER tool",
+            "expected": "401",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 401,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S12",
+            "attack": "expired access token",
+            "expected": "401",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 401,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S13",
+            "attack": "access token without the score scope",
+            "expected": "401",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 401,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S14",
+            "attack": "no access token",
+            "expected": "401",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 401,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S15",
+            "attack": "results filtered by a pseudonym of ANOTHER tool",
+            "expected": "empty list",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 200,
+            "body": "empty list",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S16",
+            "attack": "score with userId as a number instead of the pseudonym string",
+            "expected": "400, nothing stored",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 400,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S17",
+            "attack": "course tool of course 2 asks for the roster of course 1",
+            "expected": "refused (not available in the course)",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S18",
+            "attack": "roster without rlid while the policy of the tool uses the activity scope",
+            "expected": "400 (pseudonyms would be ambiguous), empty body",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 400,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S18b",
+            "attack": "the same at the core URL",
+            "expected": "request guard answers with the proxy: 400, empty body",
+            "control": false,
+            "answered_by": "guard",
+            "code": 400,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S19",
+            "attack": "score with a pseudonym retired by a rotation",
+            "expected": "404, nothing stored, audit reason \"retired\"",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S20",
+            "attack": "results filtered by a retired pseudonym",
+            "expected": "empty list",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 200,
+            "body": "empty list",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S21",
+            "attack": "after a merge: score with the merged-away pseudonym where the kept account had its own",
+            "expected": "404, audit reason \"retired\"",
+            "control": false,
+            "answered_by": "proxy",
+            "code": 404,
+            "body": "empty",
+            "grades": "unchanged"
+        },
+        {
+            "id": "S22",
+            "attack": "after a merge: score with the moved pseudonym (only the merged-away account had one)",
+            "expected": "stored for the KEPT account",
+            "control": true,
+            "outcome": "200, grade of the kept account: stored, grade of the merged-away account: none",
+            "grades": "changed"
+        },
+        {
+            "id": "T01",
+            "attack": "translator: activity of ANOTHER tool given with this tool",
+            "expected": "refused 404",
+            "control": false,
+            "outcome": "refused 404",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T02",
+            "attack": "translator: activity of another course",
+            "expected": "refused 404",
+            "control": false,
+            "outcome": "refused 404",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T03",
+            "attack": "translator: course tool outside its course",
+            "expected": "refused 404",
+            "control": false,
+            "outcome": "refused 404",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T04",
+            "attack": "translator: pseudonym of another tool",
+            "expected": "refused 404",
+            "control": false,
+            "outcome": "refused 404",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T05",
+            "attack": "translator: retired pseudonym",
+            "expected": "refused 404",
+            "control": false,
+            "outcome": "refused 404",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T06",
+            "attack": "translator: current pseudonym of the right tool, course and activity",
+            "expected": "the right local user",
+            "control": true,
+            "outcome": "resolved to the launching person",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T07",
+            "attack": "translator: reverse lookup of the same person gives the pseudonym of the launch",
+            "expected": "same pseudonym",
+            "control": true,
+            "outcome": "same pseudonym",
+            "grades": "unchanged"
+        },
+        {
+            "id": "T08",
+            "attack": "translator: contract version for other plugins",
+            "expected": "API_VERSION 2",
+            "control": true,
+            "outcome": "API_VERSION 2",
+            "grades": "unchanged"
+        },
+        {
+            "id": "A01",
+            "attack": "audit trail of all misses above",
+            "expected": "reasons recorded, no pseudonym in any audit row",
+            "control": true,
+            "outcome": "pseudonym in audit: no; miss reasons: {\"retired\":4,\"scope\":1,\"tool\":3,\"unknown\":2}"
+        }
+    ]
+}

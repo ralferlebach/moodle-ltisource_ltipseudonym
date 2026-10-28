@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/lti/source/ltipseudonym/tests/fixtures" VERSION="2026102400" COMMENT="XMLDB file for Moodle ltisource_scopedidentity"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="ltisource_scopedidentity_pol" COMMENT="Pseudonymisation and disclosure policy per level (site, tool type, course, course module). NULL columns inherit.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="typeid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="lti_types.id, 0 for site level and course module level"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Course id for course and course module level, else 0"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Course module id for course module level, else 0"/>
+        <FIELD NAME="pseudotype" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Pseudonym type, NULL inherits"/>
+        <FIELD NAME="scopetype" TYPE="char" LENGTH="16" NOTNULL="false" SEQUENCE="false" COMMENT="Pseudonym scope, NULL inherits"/>
+        <FIELD NAME="discname" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of names: pass or blank"/>
+        <FIELD NAME="discemail" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of the e-mail address"/>
+        <FIELD NAME="discpicture" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of the picture"/>
+        <FIELD NAME="discsourcedid" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of lis_person_sourcedid (idnumber)"/>
+        <FIELD NAME="discusername" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of ext_user_username"/>
+        <FIELD NAME="discresult" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of lis_result_sourcedid (carries the local user id)"/>
+        <FIELD NAME="discextra" TYPE="char" LENGTH="8" NOTNULL="false" SEQUENCE="false" COMMENT="Disclosure of other personal data in custom parameters"/>
+        <FIELD NAME="allowoverride" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Lower levels may override this policy"/>
+        <FIELD NAME="ackservices" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Administrator acknowledged AGS/NRPS incompatibility"/>
+        <FIELD NAME="usermodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="usermodified" TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="level" UNIQUE="true" FIELDS="typeid, courseid, cmid"/>
+        <INDEX NAME="courseid" UNIQUE="false" FIELDS="courseid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="ltisource_scopedidentity_map" COMMENT="Local mapping from a user to the pseudonym delivered to a tool in a scope. Never leaves the platform.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="typeid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="lti_types.id, 0 for the site scope"/>
+        <FIELD NAME="scopetype" TYPE="char" LENGTH="16" NOTNULL="true" SEQUENCE="false" COMMENT="site, deployment, course or cm"/>
+        <FIELD NAME="scopeid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Course id or course module id, else 0"/>
+        <FIELD NAME="ptype" TYPE="char" LENGTH="32" NOTNULL="true" SEQUENCE="false" COMMENT="random_persisted or hmac_secret_v1"/>
+        <FIELD NAME="token" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="The pseudonym (JWT sub)"/>
+        <FIELD NAME="version" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Identity generation, raised only by an explicit rotation"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="active or retired"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timelastused" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="identity" UNIQUE="true" FIELDS="userid, typeid, scopetype, scopeid, ptype, version"/>
+        <INDEX NAME="token" UNIQUE="true" FIELDS="token"/>
+        <INDEX NAME="typestatus" UNIQUE="false" FIELDS="typeid, status"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="ltisource_scopedidentity_aud" COMMENT="Audit trail of policy and identity changes. Never contains tokens.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="actorid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Acting user, 0 after anonymisation"/>
+        <FIELD NAME="typeid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="action" TYPE="char" LENGTH="32" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="oldvalue" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON of the previous policy"/>
+        <FIELD NAME="newvalue" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON of the new policy"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="actorid" TYPE="foreign" FIELDS="actorid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+        <INDEX NAME="typeid" UNIQUE="false" FIELDS="typeid"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

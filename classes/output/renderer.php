@@ -46,6 +46,9 @@ class renderer extends \plugin_renderer_base {
             get_string('loginhintnotice', $component),
             \core\output\notification::NOTIFY_WARNING
         );
+        if ($data->haslegacytypes) {
+            $out .= $this->notification($data->legacytypestext, \core\output\notification::NOTIFY_WARNING);
+        }
         if ($data->hasorphans) {
             $out .= $this->notification($data->orphanstext, \core\output\notification::NOTIFY_WARNING);
         }
@@ -89,6 +92,7 @@ class renderer extends \plugin_renderer_base {
             ];
         }
         $out .= \html_writer::table($table);
+        $out .= \html_writer::div(s($data->outcomestext), 'small text-muted', ['id' => 'ltisource_ltipseudonym-outcomes']);
         if ($data->canmigrate) {
             $out .= \html_writer::tag('p', \html_writer::link(
                 $data->migrateurl,

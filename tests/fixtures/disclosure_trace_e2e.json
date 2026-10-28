@@ -1,0 +1,253 @@
+{
+  "date": "2026-10-28",
+  "platforms": [
+    {
+      "site": "A",
+      "moodle": "4.5.15+"
+    },
+    {
+      "site": "B",
+      "moodle": "5.3+"
+    }
+  ],
+  "cases": [
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, no policy",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "local_user_id",
+      "names": "name / email",
+      "custom_userid": "local_user_id",
+      "result_sourcedid": "contains_local_user_id",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "local_user_id, name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id local_user_id, names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 200 / core URL HTTP 200, other person's grade CHANGED",
+      "note": "NRPS service_url_core, without rlid HTTP 200; paging 7 page(s), next links on core; results userId local_user_id; custom userid local_user_id; result id contains_local_user_id; return URL contains_session_key"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, random_persisted, deployment, pass",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (deployment)",
+      "names": "name / email",
+      "custom_userid": "pseudonym (deployment)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (deployment), name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (deployment), names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 7 page(s), next links on proxy; results userId pseudonym (deployment); custom userid pseudonym (deployment); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, random_persisted, course, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (course)",
+      "names": "empty / empty",
+      "custom_userid": "pseudonym (course)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (course), name absent, email absent",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (course), names absent",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 7 page(s), next links on proxy; results userId pseudonym (course); custom userid pseudonym (course); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, random_persisted, cm, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (cm)",
+      "names": "empty / empty",
+      "custom_userid": "pseudonym (cm)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (cm), name absent, email absent",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (cm), names absent",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 400; paging 7 page(s), next links on proxy; results userId pseudonym (cm); custom userid pseudonym (cm); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, hmac_secret_v1, site, pass",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (site)",
+      "names": "name / email",
+      "custom_userid": "pseudonym (site)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (site), name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (site), names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 7 page(s), next links on proxy; results userId pseudonym (site); custom userid pseudonym (site); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3, random_persisted, remove (tool shares names)",
+      "login_hint": "not sent",
+      "lti_message_hint": "not sent",
+      "sub": "not sent",
+      "names": "not sent",
+      "note": "refused by the request guard before the OIDC login initiation; no request reached the tool"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.3 deep linking, random_persisted, course, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "launchid only (no activity yet)",
+      "sub": "pseudonym (course)",
+      "names": "empty / empty",
+      "note": "deep linking: activity scope falls back to course scope (no activity exists yet)"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.1, no policy",
+      "login_hint": "none in LTI 1.1",
+      "lti_message_hint": "none in LTI 1.1",
+      "sub": "user_id local_user_id",
+      "names": "name / email",
+      "note": "lis_result_sourcedid contains_local_user_id, custom_userid local_user_id, ext_user_username username; LTI 1.x is not covered by the policies"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.1, site policy, setting pass",
+      "login_hint": "none in LTI 1.1",
+      "lti_message_hint": "none in LTI 1.1",
+      "sub": "user_id local_user_id",
+      "names": "name / email",
+      "note": "lis_result_sourcedid contains_local_user_id, custom_userid local_user_id, ext_user_username username; LTI 1.x is not covered by the policies"
+    },
+    {
+      "platform": "A (Moodle 4.5.15+)",
+      "case": "LTI 1.1, site policy, setting refuse",
+      "login_hint": "none in LTI 1.1",
+      "sub": "not sent",
+      "names": "not sent",
+      "note": "refused by the callback before the form post; nothing reached the tool"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, no policy",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "local_user_id",
+      "names": "name / email",
+      "custom_userid": "local_user_id",
+      "result_sourcedid": "contains_local_user_id",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "local_user_id, name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id local_user_id, names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 200 / core URL HTTP 200, other person's grade CHANGED",
+      "note": "NRPS service_url_core, without rlid HTTP 200; paging 8 page(s), next links on core; results userId local_user_id; custom userid local_user_id; result id contains_local_user_id; return URL contains_session_key"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, random_persisted, deployment, pass",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (deployment)",
+      "names": "name / email",
+      "custom_userid": "pseudonym (deployment)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (deployment), name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (deployment), names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 8 page(s), next links on proxy; results userId pseudonym (deployment); custom userid pseudonym (deployment); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, random_persisted, course, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (course)",
+      "names": "empty / empty",
+      "custom_userid": "pseudonym (course)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (course), name absent, email absent",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (course), names absent",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 8 page(s), next links on proxy; results userId pseudonym (course); custom userid pseudonym (course); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, random_persisted, cm, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (cm)",
+      "names": "empty / empty",
+      "custom_userid": "pseudonym (cm)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (cm), name absent, email absent",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (cm), names absent",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 400; paging 8 page(s), next links on proxy; results userId pseudonym (cm); custom userid pseudonym (cm); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, hmac_secret_v1, site, pass",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "cmid: activity id, launchid: instance id + random",
+      "sub": "pseudonym (site)",
+      "names": "name / email",
+      "custom_userid": "pseudonym (site)",
+      "result_sourcedid": "empty",
+      "return_url": "contains_session_key",
+      "nrps_user_id": "pseudonym (site), name name, email email",
+      "nrps_direct_core": "HTTP 200, user_id pseudonym (site), names present",
+      "ags": "score HTTP 200, grade stored for the launching person; guessed local id HTTP 404 / core URL HTTP 404, other person's grade untouched",
+      "note": "NRPS service_url_proxy, without rlid HTTP 200; paging 8 page(s), next links on proxy; results userId pseudonym (site); custom userid pseudonym (site); result id empty; return URL contains_session_key"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3, random_persisted, remove (tool shares names)",
+      "login_hint": "not sent",
+      "lti_message_hint": "not sent",
+      "sub": "not sent",
+      "names": "not sent",
+      "note": "refused by the request guard before the OIDC login initiation; no request reached the tool"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.3 deep linking, random_persisted, course, blank",
+      "login_hint": "local_user_id",
+      "lti_message_hint": "launchid only (no activity yet)",
+      "sub": "pseudonym (course)",
+      "names": "empty / empty",
+      "note": "deep linking: activity scope falls back to course scope (no activity exists yet)"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.1, no policy",
+      "login_hint": "none in LTI 1.1",
+      "lti_message_hint": "none in LTI 1.1",
+      "sub": "user_id local_user_id",
+      "names": "name / email",
+      "note": "lis_result_sourcedid contains_local_user_id, custom_userid local_user_id, ext_user_username username; LTI 1.x is not covered by the policies"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.1, site policy, setting pass",
+      "login_hint": "none in LTI 1.1",
+      "lti_message_hint": "none in LTI 1.1",
+      "sub": "user_id local_user_id",
+      "names": "name / email",
+      "note": "lis_result_sourcedid contains_local_user_id, custom_userid local_user_id, ext_user_username username; LTI 1.x is not covered by the policies"
+    },
+    {
+      "platform": "B (Moodle 5.3+)",
+      "case": "LTI 1.1, site policy, setting refuse",
+      "login_hint": "none in LTI 1.1",
+      "sub": "not sent",
+      "names": "not sent",
+      "note": "refused by the callback before the form post; nothing reached the tool"
+    }
+  ]
+}

@@ -22,4 +22,17 @@ NODE_PATH=/home/claude/e2e/node_modules /home/claude/e2e/node_modules/.bin/playw
 The config bypasses the sandbox proxy for the test hosts (`*.platform-a.test`, `*.tool-b.test`). Needs `psql` access to both site
 databases and read access to `/home/claude/e2e/log/nginx-access.log`. Not part of CI.
 
-Status: executed 2026-10-25, Chromium only: 7 passed, 0 failed.
+`disclosure_capture.spec.js` (0.3.0, audit SP-02/SP-03) uses BOTH sites as LTI 1.3 platform in turn (A = 4.5, B = 5.3). The tool is
+played by Playwright on `capture.tool-c.test` (all requests intercepted): it answers the OIDC login initiation, receives the id
+token, gets an access token from `mod/lti/token.php` (RS256 key pair generated per run) and calls NRPS/AGS through the id-token
+URLs and through the core URL (bypass attempt); LTI 1.1 form posts are captured the same way. Every value is redacted into a
+class; the result is written to `../fixtures/disclosure_trace_e2e.json` and included in `docs/DISCLOSURE_TRACE.md`.
+`support/capture_site.php` creates/removes its own fixtures (prefix `pscap`) on the site it runs on and restores the setting
+`legacyprotocol`.
+
+```bash
+flock /tmp/e2e_stack.lock env NODE_EXTRA_CA_CERTS=/home/claude/e2e/pki/ca.crt NODE_PATH=/home/claude/e2e/node_modules \
+  /home/claude/e2e/node_modules/.bin/playwright test -c tests/playwright/playwright.config.js
+```
+
+Results: see docs/ACCEPTANCE.md (dated).

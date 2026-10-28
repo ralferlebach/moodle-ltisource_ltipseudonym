@@ -48,6 +48,7 @@ class scores extends \ltiservice_gradebookservices\local\resources\scores {
             }
         }
         parent::execute($response);
+        $this->normalise_code($response);
         if ($translation !== null) {
             $this->translator()->scrub_reason($response, $translation);
         }

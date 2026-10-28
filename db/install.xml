@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/lti/source/ltipseudonym/db" VERSION="2026102502" COMMENT="XMLDB file for Moodle ltisource_ltipseudonym"
+<XMLDB PATH="mod/lti/source/ltipseudonym/db" VERSION="2026102700" COMMENT="XMLDB file for Moodle ltisource_ltipseudonym"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../../lib/xmldb/xmldb.xsd"
 >

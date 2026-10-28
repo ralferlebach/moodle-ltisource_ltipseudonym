@@ -17,7 +17,10 @@
 /**
  * Hook callbacks of ltisource_ltipseudonym.
  *
- * Only hooks of tool_mergeusers. When tool_mergeusers is not installed the hook classes do not exist; core registers the
+ * Core hook after_config: the request guard (service proxy for direct calls of mod/lti/services.php, prediction of refused
+ * launches before the OIDC login initiation), see classes/local/request_guard.php.
+ *
+ * Hooks of tool_mergeusers. When tool_mergeusers is not installed the hook classes do not exist; core registers the
  * callbacks without checking the class and never dispatches them (see tests/merge_integration_test.php).
  *
  * @package    ltisource_ltipseudonym
@@ -28,6 +31,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $callbacks = [
+    [
+        'hook' => \core\hook\after_config::class,
+        'callback' => [\ltisource_ltipseudonym\local\request_guard::class, 'after_config'],
+    ],
     [
         'hook' => 'tool_mergeusers\hook\add_settings_before_merging',
         'callback' => [\ltisource_ltipseudonym\local\merge_integration::class, 'add_settings_before_merging'],

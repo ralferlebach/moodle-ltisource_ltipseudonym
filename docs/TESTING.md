@@ -9,12 +9,52 @@
 | Concurrency | `tests/load/race.php` (`make race`) | parallel PHP processes against an installed site, asserts exactly one mapping | no (see below) |
 | Behat (non-JS) | `tests/behat/ltipseudonym.feature` | moodle behat runner | **yes**: `ltibehat <45|53> <pgsql|mariadb> ltisource_ltipseudonym` after `ltirun ... mirror`; 3 scenarios, 24 steps, all four combos green on 2026-10-25 (local, not CI). Exception pages cannot be asserted by Behat, so the teacher scenario checks the navigation and PHPUnit covers the denial |
 | Playwright two-site E2E | `tests/playwright/ltipseudonym.spec.js` | `NODE_PATH=/home/claude/e2e/node_modules /home/claude/e2e/node_modules/.bin/playwright test -c tests/playwright/playwright.config.js` (seed: `LTI_SEED`, default `/home/claude/e2e/state/seed.json`) | **yes, locally**: executed 2026-10-25, Chromium, 7 tests: 7 passed. Tests 1 to 4: stable and separated pseudonymised `sub` as received by B, `login_hint` leak recorded (SP-G1). Tests 5 to 7 (SP-02 reference): B's own `sync_members` and `sync_grades` tasks call the proxy of A with the pseudonymous `sub`; the grade arrives at the real user on A; the web server log shows the proxy served the calls. The spec writes a policy for the seeded tool and deletes it afterwards; no setting has to be changed any more |
-| CI | `.github/workflows/moodle-plugin-ci-*.yml` | GitHub Actions | no (no repository access) |
+| Playwright protocol capture (0.3.0) | `tests/playwright/disclosure_capture.spec.js` + `support/capture_site.php` | see "Protocol capture" below | yes, see ACCEPTANCE.md |
+| CI | `.github/workflows/moodle-plugin-ci-*.yml` | GitHub Actions (owner) | not by us; CI results are the owner's evidence |
 
 The template workflows for Playwright and the JMeter/k6 load tests were removed: they depended on a FlexAccess seed script and on
 endpoints this plugin does not have.
 
-## PHPUnit files (286 tests, 1518 assertions on all four combinations after the rename; counts per file are in ACCEPTANCE.md)
+## New in 0.3.0
+
+* `disclosure_trace_test` - protocol capture (OIDC login, id token, deep linking, NRPS incl. paging and the core URL, AGS
+  score/results incl. guessed local ids, LTI 1.1 launch) per LTI version, scope and policy mode, redacted into classes; compared
+  with `tests/fixtures/disclosure_trace.json` (golden file: red when what leaves the platform changes).
+* `security_protocol_test` - negative security protocol (S01 to S22, T01 to T08, A01); compared with
+  `tests/fixtures/security_protocol.json`; invariants per case: refused, no grade change, no user data in the answer.
+* `request_guard_test` - after_config wiring, routing of the core services URL (with negative control: core alone leaks), zero
+  regression for everything else, prediction of refused launches and deep-linking requests, LTI 1.x rule.
+* `claim_diff_test` - exactly the promised claims change per policy mode, none added or removed; survives backup/restore.
+* `legacy_import_test` - import from the 0.1.0 alpha with fabricated old tables (its own install.xml), dry run, conflicts,
+  generations, policies, launch afterwards.
+* `install_test` - upgrade step from `2026102502`.
+
+Regenerating the generated documents (after a deliberate change of what leaves the platform):
+
+```bash
+mkdir -p /tmp/trace && LTIPSEUDONYM_TRACE_OUT=/tmp/trace ltirun 45 pgsql ltisource_ltipseudonym phpunit \
+    --filter='disclosure_trace_test|security_protocol_test'
+cp /tmp/trace/disclosure_trace.json /tmp/trace/security_protocol.json tests/fixtures/
+cp /tmp/trace/DISCLOSURE_TRACE.md /tmp/trace/SECURITY_PROTOCOL.md docs/
+```
+
+The report generator includes `tests/fixtures/disclosure_trace_e2e.json` (written by the Playwright capture) when it exists, so
+run the Playwright capture first and copy its JSON into the plugin before regenerating.
+
+## Protocol capture on the two-site stack (Playwright)
+
+`disclosure_capture.spec.js` uses each site of the stack as LTI 1.3 platform in turn (A = Moodle 4.5, B = Moodle 5.3). The tool
+is played by Playwright on the host `capture.tool-c.test` (every request intercepted; nothing leaves the machine): it answers
+the login initiation like a tool, receives the id token, gets an access token from `mod/lti/token.php` with a freshly generated
+RS256 key, and calls NRPS/AGS through the id-token URLs and through the core URL. `support/capture_site.php` creates and removes
+the fixtures (prefix `pscap`) and sets the policies. Run under the stack lock:
+
+```bash
+flock /tmp/e2e_stack.lock env NODE_EXTRA_CA_CERTS=/home/claude/e2e/pki/ca.crt NODE_PATH=/home/claude/e2e/node_modules \
+  /home/claude/e2e/node_modules/.bin/playwright test -c tests/playwright/playwright.config.js
+```
+
+## PHPUnit files (counts per file and combination are in ACCEPTANCE.md)
 
 `catalogue_test`, `policy_manager_test`, `token_service_test`, `launch_test`, `claims_evidence_test`, `service_compat_test`,
 `migration_test`, `privacy_provider_test`, `lifecycle_test`, `wiring_test`, `ui_test` (0.1.0), and new in 0.2.0:

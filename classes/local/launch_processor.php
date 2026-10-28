@@ -42,6 +42,12 @@ class launch_processor {
     private $instructorcustom = '';
 
     /**
+     * @var bool True while a launch is only predicted (see dry_run()): every check runs, no pseudonym is created, and
+     * the callback ends the core request builder with precheck_passed instead of returning a patch.
+     */
+    private static $dryrun = false;
+
+    /**
      * Constructor.
      *
      * @param token_service|null $tokens
@@ -60,16 +66,70 @@ class launch_processor {
      * @throws \moodle_exception when the launch must not continue
      */
     public function process(object $instance, string $endpoint, array $params): array {
+        $patch = $this->compute($instance, $endpoint, $params);
+        if (self::$dryrun) {
+            throw new precheck_passed();
+        }
+        return $patch;
+    }
+
+    /**
+     * Predict a launch before Moodle core sends anything to the tool (fail closed before the OIDC login initiation).
+     *
+     * For LTI 1.3 core posts the login initiation, which carries the local user id as login_hint, BEFORE it builds the
+     * launch (gate SP-G1). A launch that this plugin will refuse would therefore still disclose the local id. The request
+     * guard calls this method on mod/lti/launch.php and mod/lti/contentitem.php before core initiates the login: $build
+     * runs the real core request builder, which calls the callback of this plugin in dry-run mode. A refusal is thrown to
+     * the caller; every other outcome (passed, or any error of the core builder in this early context) returns silently,
+     * because the real launch is checked again, fail closed, when core builds it after the login.
+     *
+     * @param callable $build runs lti_get_launch_data() or lti_build_content_item_selection_request()
+     * @throws \moodle_exception launchrefused
+     */
+    public static function dry_run(callable $build): void {
+        self::$dryrun = true;
+        try {
+            $build();
+        } catch (precheck_passed $e) {
+            return;
+        } catch (\moodle_exception $e) {
+            if ($e->errorcode === 'launchrefused' && $e->module === config::COMPONENT) {
+                throw $e;
+            }
+        } catch (\Throwable $e) {
+            // Not ours to decide here: the real launch decides, fail closed.
+            return;
+        } finally {
+            self::$dryrun = false;
+        }
+    }
+
+    /**
+     * Compute the parameter patch for a launch (see process()).
+     *
+     * @param object $instance
+     * @param string $endpoint
+     * @param array $params
+     * @return array
+     */
+    private function compute(object $instance, string $endpoint, array $params): array {
         global $CFG;
         require_once($CFG->dirroot . '/mod/lti/locallib.php');
 
         $deeplinking = ($params['lti_message_type'] ?? '') === 'ContentItemSelectionRequest';
-        $candidates = $this->candidate_types($instance, $endpoint, $deeplinking);
-        $candidates = array_filter($candidates, fn($type) => $type->ltiversion === LTI_VERSION_1P3);
+        $all = $this->candidate_types($instance, $endpoint, $deeplinking);
+        $candidates = array_filter($all, fn($type) => $type->ltiversion === LTI_VERSION_1P3);
         if (!$candidates) {
-            // LTI 1.0/1.1/2.0 or an unknown tool: out of scope, except that an unidentifiable
-            // deep-linking request must not bypass a site wide policy.
-            if ($deeplinking && $this->site_policy_active()) {
+            if ($all || !$deeplinking) {
+                // LTI 1.0/1.1/2.0, or an activity configured without a registration (core launches it as LTI 1.x).
+                // Not covered by the policies (specification SP-L05), unless the site refuses such launches.
+                $this->legacy_protocol_rule(
+                    $all ? (int) reset($all)->id : 0,
+                    (int) ($instance->course ?? 0),
+                    $deeplinking ? 0 : $this->cmid_of($instance)
+                );
+            } else if ($this->site_policy_active()) {
+                // An unidentifiable deep-linking request must not bypass a site wide policy.
                 $this->refuse('deep linking request of an unidentifiable tool under an active site policy');
             }
             return [];
@@ -142,6 +202,10 @@ class launch_processor {
             $tokenfor = function (int $userid) use ($eff, $type, $courseid, $cmid, $deeplinking): ?string {
                 if (!$eff->pseudonymising) {
                     return null;
+                }
+                if (self::$dryrun) {
+                    // A prediction creates no mapping.
+                    return 'dry-run';
                 }
                 $scope = $eff->scopetype;
                 if ($deeplinking && $scope === catalogue::SCOPE_CM) {
@@ -307,10 +371,11 @@ class launch_processor {
         // The deep-linking request builder passes no type id to the callback: identify the tool by
         // the endpoint of the request.
         $courseid = (int) ($instance->course ?? 0);
+        // Registrations of every LTI version: an LTI 1.x match is handled by the LTI 1.x rule, not as unidentifiable.
         $types = $DB->get_records_select(
             'lti_types',
-            'ltiversion = :v AND (course = :site OR course = :course)',
-            ['v' => LTI_VERSION_1P3, 'site' => SITEID, 'course' => $courseid]
+            'course = :site OR course = :course',
+            ['site' => SITEID, 'course' => $courseid]
         );
         $matches = [];
         foreach ($types as $type) {
@@ -355,6 +420,31 @@ class launch_processor {
             return $cm ? (int) $cm->id : 0;
         }
         return 0;
+    }
+
+    /**
+     * The rule for launches of LTI 1.0/1.1/2.0 tools, which the policies do not cover (specification SP-L05).
+     *
+     * With the setting "legacyprotocol" = refuse, such a launch is refused while the effective policy of its position
+     * (site default, or a policy stored for its registration) is active. Default "pass": the launch is delivered unchanged,
+     * with the local user id, and the overview lists these registrations as not covered.
+     *
+     * @param int $typeid registration of the LTI 1.x tool, 0 when unknown
+     * @param int $courseid
+     * @param int $cmid
+     */
+    private function legacy_protocol_rule(int $typeid, int $courseid, int $cmid): void {
+        if (config::legacy_protocol() !== config::LEGACY_PROTOCOL_REFUSE) {
+            return;
+        }
+        try {
+            $active = policy_manager::is_active(policy_manager::resolve($typeid, $courseid, $cmid));
+        } catch (\Throwable $e) {
+            $active = true;
+        }
+        if ($active) {
+            $this->refuse('LTI 1.x launch under an active policy (setting: refuse LTI 1.x launches)');
+        }
     }
 
     /**

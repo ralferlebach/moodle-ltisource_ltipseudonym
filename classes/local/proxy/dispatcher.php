@@ -48,29 +48,17 @@ class dispatcher {
     }
 
     /**
-     * Handle the current request.
+     * The resource of the proxy that answers a request, matched exactly as mod/lti/services.php matches it.
      *
-     * @param string|null $path path info of the request, null for $_SERVER['PATH_INFO']
-     * @param string|null $body request body, null for the input stream
-     * @return response answer, not yet sent
+     * @param response $response request state (method, Accept or Content-Type already set)
+     * @param string $path path info
+     * @return resource_base|null
      */
-    public static function handle(?string $path = null, ?string $body = null): response {
-        global $CFG;
-        require_once($CFG->dirroot . '/mod/lti/locallib.php');
-
-        $response = new response();
+    public static function match(response $response, string $path): ?resource_base {
         $isget = $response->get_request_method() === resource_base::HTTP_GET;
         $isdelete = $response->get_request_method() === resource_base::HTTP_DELETE;
-        if ($isget) {
-            $response->set_accept(isset($_SERVER['HTTP_ACCEPT']) ? $_SERVER['HTTP_ACCEPT'] : '');
-        } else {
-            $response->set_content_type(isset($_SERVER['CONTENT_TYPE']) ? explode(';', $_SERVER['CONTENT_TYPE'], 2)[0] : '');
-        }
-        $path = $path ?? (isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : '');
         $accept = $response->get_accept();
         $contenttype = $response->get_content_type();
-
-        $handler = null;
         foreach (self::services() as $service) {
             foreach ($service->get_resources() as $resource) {
                 $formats = $resource->get_formats();
@@ -85,11 +73,45 @@ class dispatcher {
                 $template = preg_replace('/\(([0-9a-zA-Z_\-,\/]+)\)/', '(\\1|)', $template);
                 $template = str_replace('/', '\/', $template);
                 if (preg_match("/^{$template}$/", $path) === 1) {
-                    $handler = $resource;
-                    break 2;
+                    return $resource;
                 }
             }
         }
+        return null;
+    }
+
+    /**
+     * Prepare the answer object of a request from the request headers, as mod/lti/services.php does.
+     *
+     * @return response
+     */
+    public static function new_response(): response {
+        $response = new response();
+        if ($response->get_request_method() === resource_base::HTTP_GET) {
+            $response->set_accept(isset($_SERVER['HTTP_ACCEPT']) ? $_SERVER['HTTP_ACCEPT'] : '');
+        } else {
+            $response->set_content_type(isset($_SERVER['CONTENT_TYPE']) ? explode(';', $_SERVER['CONTENT_TYPE'], 2)[0] : '');
+        }
+        return $response;
+    }
+
+    /**
+     * Handle the current request.
+     *
+     * @param string|null $path path info of the request, null for $_SERVER['PATH_INFO']
+     * @param string|null $body request body, null for the input stream
+     * @return response answer, not yet sent
+     */
+    public static function handle(?string $path = null, ?string $body = null): response {
+        global $CFG;
+        require_once($CFG->dirroot . '/mod/lti/locallib.php');
+
+        $response = self::new_response();
+        $path = $path ?? (isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : '');
+        $accept = $response->get_accept();
+        $contenttype = $response->get_content_type();
+
+        $handler = self::match($response, $path);
         if ($handler === null) {
             $response->set_code(400);
             $response->set_reason("No handler found for {$path} {$accept} {$contenttype}");

@@ -47,7 +47,15 @@ Tests: `privacy_provider_test`.
   own; where both had one, the merged-away account's pseudonym is retired. The tool is not told that two pseudonyms belong to one
   person; what it stored under the retired pseudonym stays there, unlinked. The audit entry holds counts only.
 
+## Import from the 0.1.0 alpha
+
+`cli/import_scopedidentity.php` copies the mapping rows (user id, pseudonym, tool, scope, times) of the old component
+`ltisource_scopedidentity` into this plugin's table, unchanged, so that tools keep the identities they know. It copies no profile
+data, writes one audit row with counts only, and is a dry run unless `--execute` is given. The data then fall under the
+Privacy API provider of this plugin; the old tables are deleted by the uninstall of the old plugin.
+
 ## Residual identification
 
 **Data protection boundary (gate SP-G1).** Before every launch Moodle core posts the local user id as `login_hint` to the tool's login URL, whatever the policy; this plugin cannot prevent it and the privacy metadata says so (external field `userid`). The tool operator therefore learns the local id even when the id token carries a pseudonym. `lis_result_sourcedid` carries it too unless blanked or removed. Pseudonymisation of `sub`
-alone is therefore not anonymisation. The identifiability ratings in the UI are orientation, not a compliance proof.
+alone is therefore not anonymisation. Further residual carriers (session key in the return URL, the ID number as an empty
+claim, LTI 1.0/1.1 launches) and the generated capture per policy: [DISCLOSURE_TRACE.md](DISCLOSURE_TRACE.md). The identifiability ratings in the UI are orientation, not a compliance proof.

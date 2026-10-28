@@ -21,9 +21,10 @@ defined('MOODLE_INTERNAL') || die();
 require_once(__DIR__ . '/fixtures/fixture.php');
 
 /**
- * Fresh installation of release 0.2.0 (first release under this component name; no upgrade path from the 0.1.0 alpha of the
- * old component): the upgrade function is a no-op, the installed schema equals install.xml, release information is consistent,
- * and a policy for a tool with AGS and NRPS launches through the service proxy.
+ * Installation and upgrade of release 0.3.0: the upgrade step from the last delivered build 2026102502 (0.2.0, the first
+ * release under this component name; no core upgrade path from the 0.1.0 alpha of the old component, see legacy_import_test),
+ * the installed schema equals install.xml, release information is consistent, and a policy for a tool with AGS and NRPS
+ * launches through the service proxy.
  *
  * @package    ltisource_ltipseudonym
  * @category   test
@@ -34,18 +35,64 @@ require_once(__DIR__ . '/fixtures/fixture.php');
  */
 final class install_test extends \advanced_testcase {
     /**
-     * The upgrade function of the renamed plugin has no steps: it returns true for any old version and leaves the schema alone.
+     * Upgrade from the last delivered build 2026102502 (0.2.0) to 2026102700 (0.3.0): the new setting legacyprotocol is
+     * written with the value that keeps the 0.2.0 behaviour, the version is saved, and no stored data changes.
      */
-    public function test_upgrade_function_is_a_noop(): void {
+    public function test_upgrade_from_2026102502(): void {
         global $CFG, $DB;
         $this->resetAfterTest();
         require_once($CFG->libdir . '/upgradelib.php');
         require_once($CFG->dirroot . '/mod/lti/source/ltipseudonym/db/upgrade.php');
-        $before = array_keys($DB->get_columns('ltisource_ltipseudonym_pol'));
-        $this->assertTrue(xmldb_ltisource_ltipseudonym_upgrade(0));
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $typeid = testing\fixture::create_type();
+        $activity = testing\fixture::create_activity($course, $typeid);
+        testing\fixture::set_policy(['typeid' => $typeid, 'pseudotype' => 'random_persisted', 'scopetype' => 'course']);
+        $sub = testing\fixture::launch($activity, $user)[2]['sub'];
+        $tables = ['ltisource_ltipseudonym_pol', 'ltisource_ltipseudonym_map', 'ltisource_ltipseudonym_aud'];
+        $before = [];
+        foreach ($tables as $table) {
+            $before[$table] = $DB->get_records($table, null, 'id');
+        }
+        // The state of a 0.2.0 site: version 2026102502, no legacyprotocol setting.
+        set_config('version', 2026102502, 'ltisource_ltipseudonym');
+        unset_config('legacyprotocol', 'ltisource_ltipseudonym');
+        $this->assertFalse(get_config('ltisource_ltipseudonym', 'legacyprotocol'));
+
         $this->assertTrue(xmldb_ltisource_ltipseudonym_upgrade(2026102502));
-        $this->assertSame($before, array_keys($DB->get_columns('ltisource_ltipseudonym_pol')));
-        $this->assertSame('2026102502', (string) get_config('ltisource_ltipseudonym', 'version'));
+
+        $this->assertSame('2026102700', (string) get_config('ltisource_ltipseudonym', 'version'));
+        $this->assertSame('pass', get_config('ltisource_ltipseudonym', 'legacyprotocol'));
+        foreach ($tables as $table) {
+            $this->assertEquals($before[$table], $DB->get_records($table, null, 'id'), $table);
+        }
+        // Same pseudonym after the upgrade.
+        $this->assertSame($sub, testing\fixture::launch($activity, $user)[2]['sub']);
+        // Running the step on a current site is a no-op (no savepoint, no exception).
+        $this->assertTrue(xmldb_ltisource_ltipseudonym_upgrade(2026102700));
+    }
+
+    /**
+     * The upgrade step never overwrites a decision of an administrator (a value that already exists).
+     */
+    public function test_upgrade_keeps_an_existing_setting(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        require_once($CFG->libdir . '/upgradelib.php');
+        require_once($CFG->dirroot . '/mod/lti/source/ltipseudonym/db/upgrade.php');
+        set_config('version', 2026102502, 'ltisource_ltipseudonym');
+        set_config('legacyprotocol', 'refuse', 'ltisource_ltipseudonym');
+        $this->assertTrue(xmldb_ltisource_ltipseudonym_upgrade(2026102502));
+        $this->assertSame('refuse', get_config('ltisource_ltipseudonym', 'legacyprotocol'));
+        $this->assertSame(
+            \ltisource_ltipseudonym\local\config::LEGACY_PROTOCOL_REFUSE,
+            \ltisource_ltipseudonym\local\config::legacy_protocol()
+        );
+        // A fresh installation has the default from settings.php; an unknown value counts as pass.
+        set_config('legacyprotocol', 'garbage', 'ltisource_ltipseudonym');
+        $this->assertSame('pass', \ltisource_ltipseudonym\local\config::legacy_protocol());
+        unset_config('legacyprotocol', 'ltisource_ltipseudonym');
+        $this->assertSame('pass', \ltisource_ltipseudonym\local\config::legacy_protocol());
     }
 
     /**
@@ -82,18 +129,18 @@ final class install_test extends \advanced_testcase {
         $plugin = new \stdClass();
         include($CFG->dirroot . '/mod/lti/source/ltipseudonym/version.php');
         $this->assertSame('ltisource_ltipseudonym', $plugin->component);
-        $this->assertSame('0.2.0', $plugin->release);
-        $this->assertSame(2026102502, $plugin->version);
+        $this->assertSame('0.3.0', $plugin->release);
+        $this->assertSame(2026102700, $plugin->version);
         $info = \core_plugin_manager::instance()->get_plugin_info('ltisource_ltipseudonym');
-        $this->assertSame('0.2.0', $info->release);
+        $this->assertSame('0.3.0', $info->release);
         $this->assertSame((string) $plugin->version, (string) $info->versiondisk);
 
         $root = $CFG->dirroot . '/mod/lti/source/ltipseudonym/';
         $changelog = file_get_contents($root . 'docs/CHANGELOG.md');
-        $this->assertMatchesRegularExpression('/^# Changelog\s+## 0\.2\.0/m', $changelog);
+        $this->assertMatchesRegularExpression('/^# Changelog\s+## 0\.3\.0/m', $changelog);
         $this->assertStringContainsString('no upgrade path from 0.1.0 alpha', $changelog);
-        $this->assertStringContainsString('0.2.0', file_get_contents($root . 'README.md'));
-        $this->assertStringContainsString('0.2.0', file_get_contents($root . 'docs/ACCEPTANCE.md'));
+        $this->assertStringContainsString('0.3.0', file_get_contents($root . 'README.md'));
+        $this->assertStringContainsString('0.3.0', file_get_contents($root . 'docs/ACCEPTANCE.md'));
         $install = file_get_contents($root . 'db/install.xml');
         $this->assertStringContainsString('VERSION="' . $plugin->version . '"', $install);
         $this->assertStringContainsString('PATH="mod/lti/source/ltipseudonym/db"', $install);

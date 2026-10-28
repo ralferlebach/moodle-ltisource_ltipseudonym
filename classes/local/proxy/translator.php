@@ -37,6 +37,13 @@ use ltisource_ltipseudonym\local\token_service;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class translator {
+    /**
+     * @var int Version of the read-only translation contract used by other plugins (local_lticompletionsync):
+     * context_for(), user_of(), pseudonym_of() and context::pseudonymising(). 1 = 0.2.0; 2 = 0.3.0 (context_for() refuses
+     * coordinates that do not belong together, pseudonym_of() added). Raised only when the contract changes.
+     */
+    public const API_VERSION = 2;
+
     /** @var int A local user id that does not exist, used to produce an empty result set. */
     public const NO_USER = 2147483647;
 
@@ -58,10 +65,16 @@ class translator {
     /**
      * The identity context of a request, or null when the policy changes nothing for it.
      *
+     * The coordinates are bound to each other before any policy is evaluated (finding SP-03): the tool registration must
+     * be usable in the course (a site tool or a tool of that course), and an addressed activity must be an LTI activity
+     * of that course that launches exactly this tool registration. Coordinates that do not belong together are refused,
+     * so that a request can never be answered with the policy, the scope or the pseudonyms of another tool or course.
+     *
      * @param \stdClass|null $type lti_types record of the authenticated tool
      * @param int $courseid
      * @param int $cmid course module of the addressed activity (0 when none)
      * @return context|null
+     * @throws refusal 404 when the course or the activity does not belong to the tool
      */
     public function context_for(?\stdClass $type, int $courseid, int $cmid): ?context {
         global $CFG;
@@ -69,11 +82,44 @@ class translator {
         if (!$type || empty($type->id) || $type->ltiversion !== LTI_VERSION_1P3) {
             return null;
         }
+        $this->assert_binding($type, $courseid, $cmid);
         $policy = policy_manager::resolve((int) $type->id, $courseid, $cmid);
         if (!policy_manager::is_active($policy)) {
             return null;
         }
         return new context((int) $type->id, $courseid, $cmid, $policy);
+    }
+
+    /**
+     * Refuse coordinates that do not belong together: tool, course and activity.
+     *
+     * @param \stdClass $type lti_types record
+     * @param int $courseid
+     * @param int $cmid 0 when no activity is addressed
+     * @throws refusal 404
+     */
+    public function assert_binding(\stdClass $type, int $courseid, int $cmid): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/mod/lti/locallib.php');
+        if ($courseid <= 0 || !$DB->record_exists('course', ['id' => $courseid])) {
+            throw new refusal(404, 'Not Found: unknown course');
+        }
+        $typecourse = (int) ($type->course ?? SITEID);
+        if ($typecourse !== (int) SITEID && $typecourse !== $courseid) {
+            throw new refusal(404, 'Not Found: the tool is not available in the course');
+        }
+        if ($cmid <= 0) {
+            return;
+        }
+        $cm = get_coursemodule_from_id('lti', $cmid, 0, false, IGNORE_MISSING);
+        if (!$cm || (int) $cm->course !== $courseid) {
+            throw new refusal(404, 'Not Found: LTI link is not part of the course');
+        }
+        $lti = $DB->get_record('lti', ['id' => $cm->instance], '*', IGNORE_MISSING);
+        $linktype = $lti ? lti_get_instance_type($lti) : null;
+        if (!$linktype || (int) $linktype->id !== (int) $type->id) {
+            throw new refusal(404, 'Not Found: LTI link does not belong to the tool');
+        }
     }
 
     /**
@@ -183,6 +229,22 @@ class translator {
             }
         }
         return $result;
+    }
+
+    /**
+     * The pseudonym of one local user in the scope of a context (forward translation; created on first use like a launch).
+     *
+     * @param context $ctx a pseudonymising context
+     * @param int $userid
+     * @return string
+     * @throws \coding_exception when the context does not pseudonymise
+     */
+    public function pseudonym_of(context $ctx, int $userid): string {
+        if (!$ctx->pseudonymising()) {
+            throw new \coding_exception('The policy of this context does not pseudonymise');
+        }
+        $this->require_activity_for_scope($ctx);
+        return $this->pseudonyms_for($ctx, [$userid])[$userid];
     }
 
     /**

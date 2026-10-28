@@ -32,6 +32,8 @@ class overview implements \renderable, \templatable {
     private $canmigrate;
     /** @var int number of orphaned mappings */
     private $orphans;
+    /** @var string[] LTI 1.x registrations (id => name), not covered by the policies */
+    private $legacytypes;
 
     /**
      * Constructor.
@@ -39,11 +41,13 @@ class overview implements \renderable, \templatable {
      * @param array[] $rows
      * @param bool $canmigrate
      * @param int $orphans
+     * @param string[]|null $legacytypes LTI 1.x registrations (id => name); null reads them from the database
      */
-    public function __construct(array $rows, bool $canmigrate, int $orphans) {
+    public function __construct(array $rows, bool $canmigrate, int $orphans, ?array $legacytypes = null) {
         $this->rows = $rows;
         $this->canmigrate = $canmigrate;
         $this->orphans = $orphans;
+        $this->legacytypes = $legacytypes ?? \ltisource_ltipseudonym\local\overview_builder::legacy_types();
     }
 
     /**
@@ -64,13 +68,15 @@ class overview implements \renderable, \templatable {
             $item->identifiability = get_string('identifiability:' . $meta['identifiability'], $component);
             $item->scope = get_string('scope:' . $row['scopetype'], $component);
             $restricted = [];
-            foreach ($row['blanked'] as $category) {
-                $restricted[] = get_string('disc:' . $category, $component) . ' (' . get_string('disc:blank', $component) . ')';
+            foreach ($row['effects'] as $category => $effect) {
+                // What the launch really carries, never "removed" for a claim core still sends (SP-04).
+                $restricted[] = get_string('effectline', $component, (object) [
+                    'category' => get_string('disc:' . $category, $component),
+                    'mode' => get_string('discshort:' . $effect['mode'], $component),
+                    'effect' => get_string('effect:' . $effect['effect'], $component),
+                ]);
             }
-            foreach ($row['removed'] as $category) {
-                $restricted[] = get_string('disc:' . $category, $component) . ' (' . get_string('disc:remove', $component) . ')';
-            }
-            $item->disclosure = $restricted ? implode(', ', $restricted) : get_string('disc:nonerestricted', $component);
+            $item->disclosure = $restricted ? implode('; ', $restricted) : get_string('disc:nonerestricted', $component);
             $item->conflicts = [];
             foreach ($row['conflicts'] as $category => $verdict) {
                 $item->conflicts[] = get_string(
@@ -90,6 +96,13 @@ class overview implements \renderable, \templatable {
             $item->canmigrate = $this->canmigrate;
             $data->rows[] = $item;
         }
+        $data->haslegacytypes = !empty($this->legacytypes);
+        $data->legacytypestext = get_string(
+            \ltisource_ltipseudonym\local\config::legacy_protocol() === 'refuse' ? 'legacytypes:refuse' : 'legacytypes:pass',
+            $component,
+            implode(', ', $this->legacytypes)
+        );
+        $data->outcomestext = get_string('disclosureoutcomes', $component);
         $data->orphans = $this->orphans;
         $data->hasorphans = $this->orphans > 0;
         $data->orphanstext = get_string('orphansfound', $component, $this->orphans);

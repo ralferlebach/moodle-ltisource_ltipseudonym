@@ -1,12 +1,107 @@
 # Acceptance
 
-Date of this assessment: 2026-10-25. Plugin release 0.2.0 (alpha, `2026102502`).
+Date of this assessment: 2026-10-27. Plugin release **0.3.0** (alpha, `2026102700`), work tree delivered as ZIP; the owner pushes
+it to `development`. Audit basis: AUDIT_2026-10-27 (development branches), items SP-01 to SP-04 and FAM.
 
-Status classes (used strictly): **code present** | **automated tests (local)** | **CI passed** | **functionally accepted** | **not verified**.
+Status classes (used strictly): **code present** | **automated tests (local)** | **CI passed (not executed by us)** |
+**functionally accepted (owner)** | **not verified** | **core gate open**.
 
-* **CI passed: nothing.** GitHub Actions was not executed (no repository access from this environment).
-* **Functionally accepted: nothing.** No human acceptance has taken place.
-* "Automated tests (local)" means the named test ran green in the combinations of the matrix below, nothing more.
+* **Local evidence** = the named tests ran green in the combinations listed under "Runs 0.3.0" below, on this machine.
+* **CI passed: not claimed.** GitHub Actions is run by the owner; the development CI run of the pushed commit is the primary CI
+  evidence and is not part of this document. The 5.3 CI setup (SP-01) is fixed by the CI agent in `.github/workflows` (not
+  edited here).
+* **Functionally accepted: nothing.** No owner acceptance has taken place.
+* Skipped tests are never counted; there are none in this suite. Fixtures/mocks alone are never counted for an E2E item.
+
+## Audit 2026-10-27: items of this plugin
+
+| ID | Requirement | Status | Code | Tests (local) | Result / boundary |
+|---|---|---|---|---|---|
+| SP-01 | CI 5.3 gate | code present; automated tests (local) on 5.3 pgsql + mariadb; CI: not executed by us | no code blocks 5.3: PHP 8.1 syntax, PHPUnit 9 docblocks (PHPUnit 11 reports them as PHPUnit deprecations, accepted) | full suite on 5.3 pgsql/mariadb, see Runs | green locally; the CI container fix is the CI agent's |
+| SP-02a | Protocol capture LTI 1.3 per scope and policy mode: OIDC login (`login_hint`, `lti_message_hint`), id token incl. custom claims, legacy result id, NRPS, AGS, deep linking | automated tests (local) + real two-site capture | `tests/disclosure_trace_test.php`, `tests/playwright/disclosure_capture.spec.js` | `disclosure_trace_test::test_disclosure_trace` (31 cells, golden file `tests/fixtures/disclosure_trace.json`, identical on 4.5/5.0-5.3); Playwright capture on A (4.5) and B (5.3) as platform | report `docs/DISCLOSURE_TRACE.md` (generated) |
+| SP-02b | Protocol capture LTI 1.1 | automated tests (local) + real two-site capture | same | LTI 1.1 cells (no policy, site policy pass, site policy refuse) | not covered by the policies (spec SP-L05); refusable by setting `legacyprotocol` |
+| SP-02c | `login_hint` carries the local id | **core gate open** | none possible (`lti_build_login_request()` has no hook; `mod/lti/auth.php` accepts only `$USER->id`) | `login_hint_boundary_test::*` (tripwires), trace rows "OIDC login", Playwright assertions on both platforms | product promise **limited** (DOCUMENTATION "Product promise"); fork-free workarounds evaluated and rejected (not upstream-able); upstream hook proposed |
+| SP-02d | `lti_message_hint` | **core gate open** (cannot be affected) | none | trace + Playwright: `cmid` = activity id, `launchid` = instance id + random | carries no user identifier |
+| SP-02e | Refusal rules for identifying claims | code present; automated tests (local); E2E | `classes/local/request_guard.php:219` (`precheck_launch`), `:258` (`precheck_deep_linking`), `classes/local/launch_processor.php:89` (`dry_run`), `:436` (LTI 1.x rule) | `request_guard_test::test_refused_launch_is_predicted_before_the_login`, `test_prediction_only_where_it_applies`, `test_deep_linking_prediction`, `test_lti1_rule`; trace cells `random_remove_shared`; Playwright "remove while the tool shares names" (no request reaches the tool) | a refused launch is refused before the OIDC login initiation (no `login_hint` sent) |
+| SP-02f | No false privacy guarantee | code present; automated tests (local) | lang `launchrefused`, `boundary_desc`, `legacyprotocol*`, docs | `login_hint_boundary_test::*`, `ui_test::test_overview_never_claims_removed_for_a_sent_claim` | residual identifiers named in DOCUMENTATION / DISCLOSURE_TRACE |
+| SP-03a | Every proxy request bound to tool/deployment, course, resource link and scope | code present; automated tests (local) | `classes/local/proxy/translator.php:101` (`assert_binding`), `:295` (`mismatch`), `classes/local/services/resources/contextmemberships.php:53` | `security_protocol_test` S06-S10, S17, T01-T03 | 404 with empty body |
+| SP-03b | Core URL bypass closed | code present; automated tests (local); E2E | `classes/local/request_guard.php:102` (`core_service_response`), `:143`; `db/hooks.php` | `request_guard_test::test_direct_core_roster_is_answered_by_the_proxy` (with negative control: core alone leaks local ids and names), `test_direct_core_score_with_local_id_is_refused`, `test_core_answers_everything_else` (zero regression); protocol S04, S05, S09, S18b; Playwright core-URL calls on A and B | |
+| SP-03c | Translation for local_lticompletionsync | code present; automated tests (local) | `translator.php:45` (`API_VERSION` 2), `:79` (`context_for`), `:242` (`pseudonym_of`), `:264` (`user_of`) | protocol T01-T08; use in `local_lticompletionsync` `classes/local/receiver/identity_resolver.php` read: compatible (context_for + user_of, all throwables fail closed) | the completionsync suite itself was not run by this agent |
+| SP-03d | Mismatched / retired token fails closed, no role or name disclosure | automated tests (local) | `translator.php:264`, `services/proxy_resource.php` (`fail`, `normalise_code`) | protocol S01-S03, S15, S16, S19-S21 (body empty or empty list, grades unchanged, audit reasons without values, A01) | |
+| SP-03e | Real AGS score/results, NRPS context and link memberships incl. paging, deep linking, reverse lookup, course and cm scope | automated tests (local); E2E (real reference tool enrol_lti on B for A; capture tool on A and B) | proxy resources | trace (paging with `limit=1`, next links on the proxy; results ids; cm scope 400 without `rlid`), `service_proxy_test::*`, protocol T07 (reverse lookup), Playwright | |
+| SP-03f | Token rotation, account merge (tool_mergeusers hooks) | automated tests (local) | `migration_service`, `merge_integration` | protocol S19-S22, `merge_integration_test::*` (stand-ins of the hook objects; tool_mergeusers not installed on the test sites) | the real tool_mergeusers run is the lead's gate |
+| SP-03g | A foreign token cannot affect a local user | automated tests (local); E2E | as SP-03a/b | protocol S01, S04, S10, S11; trace column "guessed local id" (404, not stored, under every pseudonymising mode, via proxy and core URL); Playwright guesses on A and B | under non-pseudonymising policies the tool knows local ids anyway (core behaviour, recorded in the trace) |
+| SP-03h | Two-site suite 4.5 and 5.3, PHPUnit 5.0-5.2 | see Runs | | | |
+| SP-03i | Negative security protocol in the docs | automated tests (local) | `tests/security_protocol_test.php` | golden file `tests/fixtures/security_protocol.json` | `docs/SECURITY_PROTOCOL.md` (generated) |
+| SP-04a | pass/blank/remove/refuse understandable, no false "removed" | code present; automated tests (local); Behat | `classes/local/overview_builder.php:61` (`effect`), `classes/output/overview.php`, lang `disclosureoutcomes`, `disclosureinfo`, `effect:*` | `ui_test::test_overview_never_claims_removed_for_a_sent_claim`, Behat "Remove is shown as absent only where ..." | |
+| SP-04b | Safe exit path from the 0.1.0 alpha | code present; automated tests (local) | `classes/local/legacy_import.php:79`, `cli/import_scopedidentity.php` | `legacy_import_test::*` (fabricated old tables from the alpha's install.xml) | dry run by default; not run on a real alpha site (none exists any more) |
+| SP-04c | Claim-diff tests | automated tests (local) | | `claim_diff_test::test_claim_diff` (8 modes), `test_remove_is_absent_or_refused` | no claim is ever added or removed by the plugin |
+| SP-04d | Upgrade and restore tests | automated tests (local) | `db/upgrade.php:36` | `install_test::test_upgrade_from_2026102502`, `test_upgrade_keeps_an_existing_setting`, `claim_diff_test::test_claim_diff_survives_backup_and_restore`, `lifecycle_test::*` | |
+| FAM-00 | Branch policy documented | code present | README "Branch policy" | | |
+| FAM-02 | No lockstep, versioned contract | code present | `translator::API_VERSION`; `$plugin->dependencies = []` | protocol T08 | |
+| FAM-05 | Evidence separation | this document | | | local / CI / owner separated |
+
+### Mutation and negative controls (0.3.0)
+
+Run 2026-10-28 on 4.5/pgsql with a focused filter; each mutation applied to the source, tests run, source restored (script
+in the scratchpad of this round; the source was verified free of the mutation afterwards). All red:
+
+| Mutation | Red tests |
+|---|---|
+| M18 request guard never routes the core services URL | `request_guard_test` (3: direct roster, direct score, routing), `security_protocol_test` (S04, S05, S18b) |
+| M19 `assert_binding()` accepts any coordinates | `security_protocol_test` (S06, S07, S10, T01-T03) |
+| M20 dry run does not run the core builder (no prediction) | `request_guard_test` (3), `disclosure_trace_test` (cells `random_remove_shared`) |
+| M21 legacy import ignores existing rows | `legacy_import_test::test_dry_run_then_execute` |
+| M22 overview reports "absent" for every `remove` | `ui_test::test_overview_never_claims_removed_for_a_sent_claim` |
+
+Negative controls that are part of the tests: `request_guard_test::test_direct_core_roster_is_answered_by_the_proxy` first shows
+that core alone answers the core URL with local ids and e-mail addresses; `security_protocol_test` asserts for every non-control
+case that the request is refused, no grade changes and the answer carries no user data; the trace records that without a
+pseudonymising policy a guessed local id is accepted by core (control). Earlier mutations M1-M17 (0.2.0) are listed in the
+history section below.
+
+## Runs 0.3.0 (2026-10-27)
+
+Local evidence only (this machine, `ltirun` / `ltibehat` / Playwright); GitHub CI is the owner's and is not claimed.
+
+| Cell | Static (phplint, validate, savepoints, mustache, codechecker 0 warnings, phpdoc 0 warnings) | PHPUnit | Date |
+|---|---|---|---|
+| 4.5 PostgreSQL 16, PHP 8.3 (`ltirun 45 pgsql all`) | OK | OK, 312 tests, 1920 assertions | 2026-10-27 |
+| 4.5 MariaDB 11.4, PHP 8.3 (`ltirun 45 mariadb all`) | OK | OK, 312 tests, 1920 assertions | 2026-10-27 |
+| 5.3 PostgreSQL 17, PHP 8.3 (`ltirun 53 pgsql all`) | OK | OK, 312 tests, 1920 assertions; 38 PHPUnit deprecations (PHPUnit 9 docblocks, accepted) | 2026-10-27 |
+| 5.3 MariaDB 11.4, PHP 8.3 (`ltirun 53 mariadb all`) | OK | OK, 312 tests, 1920 assertions; 38 PHPUnit deprecations | 2026-10-27 |
+| 5.0 PostgreSQL 16, PHP 8.3 (`ltirun 50 pgsql all`) | OK | OK, 312 tests, 1920 assertions; 38 PHPUnit deprecations | 2026-10-27 |
+| 5.1 PostgreSQL 16, PHP 8.3 (`ltirun 51 pgsql all`, then `phpunit`) | OK | first run: 1 failure (`install_test::test_release_information_is_consistent`: ACCEPTANCE.md not yet updated, docs only); re-run 2026-10-28: OK, 312 tests, 1920 assertions; 38 PHPUnit deprecations | 2026-10-27/28 |
+| 5.2 PostgreSQL 16, PHP 8.3 (`ltirun 52 pgsql all`, then `phpunit`) | OK | same as 5.1: re-run OK, 312 tests, 1920 assertions | 2026-10-27/28 |
+
+Not run by us: 5.0-5.2 MariaDB, PHP 8.2/8.4 cells (the lead's `ltifullmatrix`), GitHub CI.
+
+PHPUnit tests per new file: disclosure_trace 1 (31 capture cells: 9 LTI 1.3 modes x scopes + 3 LTI 1.1), security_protocol 1 (34
+recorded cases with per-case assertions), request_guard 8, claim_diff 10, legacy_import 4, install 5 (upgrade 2), ui +1.
+The disclosure capture is identical on 4.5 and 5.0-5.3 (same golden file passes on every cell).
+
+Behat (non-JS, `ltibehat <tree> pgsql ltisource_ltipseudonym`): 4.5: 4 scenarios / 47 steps passed; 5.3: 4 scenarios / 47 steps
+passed (2026-10-27). New scenario: "Remove is shown as absent only where the tool does not share the claim, and LTI 1.x tools as
+not covered" (form refuses `remove` for a sharing tool; overview shows "absent" for the quiet tool; LTI 1.x notice).
+
+Playwright two-site stack, Chromium, one run under `/tmp/e2e_stack.lock` (2026-10-28): **27 passed, 0 failed**.
+* `disclosure_capture.spec.js` (20): A (Moodle 4.5.15+) and B (Moodle 5.3+) each as LTI 1.3 platform for a capture tool:
+  no policy, random/deployment, random/course/blank, random/cm/blank (roster needs `rlid`), hmac/site, remove while the tool
+  shares names (refused before the login initiation: no request reached the tool), deep linking, LTI 1.1 (no policy, site
+  policy pass, site policy refuse). Real access tokens from `token.php`; NRPS through the id-token URL, with `rlid`, paged
+  (`limit=1`) and through the core URL; AGS score and results; guessed local ids via proxy and core URL (404, other person's
+  grade untouched). Result: `tests/fixtures/disclosure_trace_e2e.json`, section "Real two-site capture" of DISCLOSURE_TRACE.md.
+* `ltipseudonym.spec.js` (7): A (4.5) platform -> B (5.3) `enrol_lti` tool: pseudonymous `sub` stable and scope/type
+  separated, `login_hint` tripwire, B's own `sync_members` (NRPS) and `sync_grades` (AGS) through the proxy with the grade at
+  the real user on A.
+* Earlier runs of this round failed for infrastructure reasons (database restarts of the shared machine) and for two test
+  defects that were fixed: grades of a previous case not cleared; a substring check that matched the role URI
+  `...membership#Learner` against the last name "Learner"; and an assertion of the 0.2.0 spec that assumed no other suite ever
+  launched the same student without a policy on the shared stack (now compares before/after).
+* The spec removes its fixtures (`pscap*` registrations, activities, users, policies) and restores `legacyprotocol = pass`;
+  checked on both site databases afterwards.
+
+## History: assessment of 0.2.0 (2026-10-25)
 
 ## Post-rename cleanup re-run (2026-10-25, version 2026102502 unchanged)
 

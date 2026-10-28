@@ -1,8 +1,9 @@
 # Documentation
 
-Developer documentation of `ltisource_ltipseudonym` 0.2.0 (alpha). Status wording follows
+Developer documentation of `ltisource_ltipseudonym` 0.3.0 (alpha). Status wording follows
 [ACCEPTANCE.md](ACCEPTANCE.md). Index: [NAMING](NAMING.md), [SECURITY](SECURITY.md), [PRIVACY](PRIVACY.md),
-[TESTING](TESTING.md), [ILIAS-COMPARISON](ILIAS-COMPARISON.md).
+[TESTING](TESTING.md), [ILIAS-COMPARISON](ILIAS-COMPARISON.md), [DISCLOSURE_TRACE](DISCLOSURE_TRACE.md) (generated),
+[SECURITY_PROTOCOL](SECURITY_PROTOCOL.md) (generated).
 
 ## Architecture
 
@@ -15,6 +16,12 @@ mod_lti lti_get_launch_data() / content-item request builder
              -> claim_guard        (claims that must be absent still built by core? refuse)
              -> token_service      (atomic get-or-create in ..._map, HMAC derivation)
         <- array of replaced request parameters (array_merge in core)
+
+lib/setup.php, end (every request) -> core hook \core\hook\after_config
+   -> request_guard                (db/hooks.php)
+        mod/lti/services.php     -> user-data resource + active policy? answer with the service proxy, end the request
+        mod/lti/launch.php       -> predict the launch (launch_processor::dry_run()), refuse BEFORE the OIDC login
+        mod/lti/contentitem.php  -> the same for the deep-linking request
 ```
 
 | Class (`classes/local`) | Responsibility |
@@ -26,11 +33,13 @@ mod_lti lti_get_launch_data() / content-item request builder
 | `service_info` | Which user-identifying services (AGS/NRPS) a tool registration has enabled (information for the overview). |
 | `proxy\dispatcher`, `proxy\translator`, `services\*` | The identity-aware service proxy (see below). |
 | `claim_guard` | Which claims core builds for a tool registration; enforces the disclosure value `remove`. |
-| `launch_processor` | The callback logic; wraps every unexpected error into `launchrefused`. |
+| `launch_processor` | The callback logic; wraps every unexpected error into `launchrefused`; dry-run prediction; LTI 1.x rule. |
+| `request_guard` | after_config hook: routes direct calls of core's services endpoint to the proxy, predicts refused launches. |
+| `legacy_import` | Imports the pseudonym map (and policies) of the 0.1.0 alpha `ltisource_scopedidentity`; CLI `cli/import_scopedidentity.php`. |
 | `migration_service` | Preview, rotation, re-binding after tool re-registration, orphan and retired purge. |
 | `audit`, `overview_builder`, `observer` | Audit rows (never tokens), UI data, cleanup on user/course/activity deletion. |
 
-Tables (names use the full component prefix, the xmldb limit is 28 characters, see [NAMING](NAMING.md)):
+Tables (names use the full component prefix, the xmldb limit is 53 characters in 4.5 and 5.3, see [NAMING](NAMING.md)):
 `ltisource_ltipseudonym_pol` (policy rows per level), `_map` (userid, typeid, scopetype, scopeid, ptype, token,
 version, status, times; unique on the identity tuple and on the token), `_aud` (actor, context, old/new policy JSON, never tokens).
 
@@ -55,10 +64,100 @@ version, status, times; unique on the identity tuple and on the token), `_aud` (
 
 | Gate | Result | Evidence |
 |---|---|---|
-| SP-G1 `login_hint` | **Open, boundary declared (0.2.0).** `lti_build_login_request()` sets `login_hint` to the local id without any extension point, and `mod/lti/auth.php` rejects every other value, so the hint cannot be decoupled by a plugin. See "Data protection boundary" below. | `login_hint_boundary_test::*`, `launch_test::test_login_hint_still_exposes_the_local_id`; Playwright trace. |
+| SP-G1 `login_hint` | **Core gate open, boundary declared; product promise limited (0.3.0, see "Product promise").** `lti_build_login_request()` sets `login_hint` to the local id without any extension point, and `mod/lti/auth.php` rejects every other value, so the hint cannot be decoupled by a plugin. See "Data protection boundary" below. | `login_hint_boundary_test::*`, `launch_test::test_login_hint_still_exposes_the_local_id`; Playwright trace. |
 | SP-G2 AGS/NRPS | **Closed by the service proxy (0.2.0)** except for LTI 1.1 basic outcomes. Core resolves local ids (evidence); the proxy translates. See "Service proxy" below. | Core behaviour: `service_compat_test::*`. Proxy: `service_proxy_test::*`, `launch_test::test_services_launch_*`, `test_basic_outcomes_are_the_one_strict_boundary`; two-site run in `tests/playwright`. |
 | SP-G3 callback reaches the plugin | Works on 4.5 and 5.3 (see TESTING for the combos run). | `launch_test::test_core_calls_the_callback_by_its_component_name`. |
 | SP-G4 activity form hook | **No hook.** Fallback: policy page per course, linked from the course navigation. | `wiring_test::test_activity_form_has_no_plugin_hook`, `test_course_navigation`. |
+
+## Product promise (decision 0.3.0, audit SP-02)
+
+**Limited promise.** The plugin promises: the LTI 1.3 id token (`sub`, `for_user_id`, `$User.id` custom parameters), the
+roster (NRPS) and the grade exchange (AGS) carry a pseudonym of the chosen scope instead of the local user id; the other
+identifying data follow the disclosure policy (pass / blank / remove-or-refuse); a tool cannot use its access token to reach a
+local user it was not given (foreign, retired or guessed identifiers are refused, also through the core URL). It does **not**
+promise end-to-end pseudonymity towards the tool operator: the OIDC login initiation carries the local user id (`login_hint`,
+core gate open), and LTI 1.0/1.1 launches are not covered at all. Wording to use: "pseudonymised id token and services";
+never "anonymous" or "end-to-end pseudonymous".
+
+Why limited and not fixed: there is no fork-free, upstream-able way to change `login_hint`.
+
+* `lti_build_login_request()` (`mod/lti/locallib.php`, 4.5 to 5.3) builds `login_hint = $USER->id` with no callback, hook or
+  event; `mod/lti/auth.php` refuses every other value (`$loginhint !== $USER->id` -> `access_denied`). Tripwires:
+  `login_hint_boundary_test`.
+* Evaluated and rejected, fork-free but not upstream-able: (a) buffering the output of `mod/lti/launch.php` in the after_config
+  hook and rewriting the hidden `login_hint` field, plus rewriting `$_GET/$_POST['login_hint']` back on `mod/lti/auth.php`:
+  works only by editing HTML and request superglobals of core's authentication flow, breaks silently when core changes its
+  markup, and is security-critical code that Moodle would not accept upstream; (b) a relay endpoint registered as the tool's
+  login URL and as the platform's authentication URL at the tool: requires reconfiguring every tool (breaks dynamic
+  registration) and adds an authentication redirector. Neither is shipped.
+* Upstream-able approach (proposal, not implemented; needs a core change): a hook `\mod_lti\hook\before_login_request`
+  dispatched in `lti_build_login_request()` that may replace `login_hint` by an opaque value, and a matching resolution in
+  `mod/lti/auth.php` (accept the opaque value when the hook resolves it to `$USER->id`). The plugin's token service would
+  supply a per-launch handle. Until such a hook exists the gate stays open.
+
+**`lti_message_hint`** (evaluated, audit SP-02): built by the same core function, also without an extension point, so the
+plugin cannot change it. It carries no user identifier: `cmid` (the activity, also visible in the id token as resource link)
+and `launchid` (`ltilaunch<lti instance id>_<random>` for a launch, `ltilaunch_<message type><random>` for deep linking), the
+key under which core stores the launch in the session. Nothing to fix.
+
+**What still identifies the user** (generated evidence: [DISCLOSURE_TRACE.md](DISCLOSURE_TRACE.md); PHPUnit capture on 4.5
+and 5.3, real browser and HTTP capture on the two-site stack with A = 4.5 and B = 5.3 as platform):
+
+| Carrier | Under the strongest policy (random, activity scope, everything blank) | Status |
+|---|---|---|
+| OIDC `login_hint` | local user id | **core gate open** (SP-G1) |
+| `launch_presentation.return_url` | carries the Moodle session key (`sesskey`), the same in all launches of one browser session, so launches of different scopes can be linked within a session | **core gate open** (return.php requires the sesskey; irrelevant while `login_hint` leaks) |
+| `lis_person_sourcedid` (ID number) | empty claim, never absent | **core gate open** (core always builds it) |
+| Claims core builds although the policy says `remove` | launch refused, nothing sent (predicted before the login initiation) | by design (a callback cannot delete) |
+| LTI 1.1 result id (`basicoutcome.lis_result_sourcedid`, `$Result.sourcedId`) | empty (default under pseudonymisation); with `pass` it carries the local id | documented leak when passed |
+| Roles, context, resource link, `lti_message_hint` | course role, course and activity ids | no user identifier (attributes of the membership) |
+| The pseudonym itself | stable within its scope: links all launches, scores and roster entries of the person in that scope | by design (choose the scope) |
+| IP address, user agent, cookies of the browser at the tool | visible to the tool operator | outside the protocol, not controllable by a platform plugin |
+| LTI 1.0/1.1 launches | local id and all shared data, unchanged (or refused, setting `legacyprotocol`) | not covered (spec SP-L05) |
+
+## Request guard (0.3.0, audit SP-02/SP-03)
+
+`classes/local/request_guard.php`, registered for `\core\hook\after_config` (dispatched at the end of `lib/setup.php` for every
+request, 4.5 to 5.3). It returns at once unless `$SCRIPT` is one of three core scripts:
+
+* `mod/lti/services.php`: the core endpoint answers rosters with local ids and full names and accepts scores for any gradable
+  local id. A tool given pseudonyms could build the core URL itself and bypass the proxy (the PHPUnit negative control shows
+  the full roster). When the request addresses a user-data resource (context or link memberships, scores, results) and the
+  effective policy of the tool, course and activity is active, the guard answers the request with the service proxy and ends
+  it. The tool is taken from every source a request can name it (path, `type_id`, link, bearer token); any doubt routes to the
+  proxy, which authenticates exactly like core. Line items, other services, LTI 1.x tools and inactive policies stay with
+  core (zero regression).
+* `mod/lti/launch.php` and `mod/lti/contentitem.php`: for LTI 1.3 core posts the OIDC login initiation (with `login_hint`)
+  before it builds the launch, so a launch the policy refuses would still disclose the local id. The guard runs the real core
+  request builder in dry-run mode (`launch_processor::dry_run()`: all checks, no mapping created, ended before signing) and
+  refuses before anything is sent. Only for a logged-in user who may launch (or add tools), only on the first pass; anything
+  it cannot judge is left to core, and the callback still checks the real launch (fail closed).
+
+## Request binding (0.3.0, audit SP-03)
+
+Every proxy request is bound before a pseudonym is translated: the bearer token to the tool (core `check_tool()`), the tool to
+the course (site tool or a tool of that course), the addressed activity (`rlid`, link, line item) to the course and to the
+same tool (`translator::assert_binding()`), and the mapping row to the tool, scope, pseudonym type and status (`mismatch()`).
+Context rosters with an `rlid` of another course or tool are refused with 404 before core runs (core would answer with an
+invalid status 0). Mismatches answer with an empty body (no roles, names or ids). Evidence: [SECURITY_PROTOCOL.md](SECURITY_PROTOCOL.md).
+
+### Translation contract for other plugins (local_lticompletionsync)
+
+`\ltisource_ltipseudonym\local\proxy\translator` is the read-only service other plugins use without a hard dependency:
+`context_for(type, courseid, cmid)` (null when the policy changes nothing; refusal 404 when the coordinates do not belong
+together), `context::pseudonymising()`, `user_of(context, pseudonym, service)` (refusal 404 for unknown, retired, foreign or
+other-scope pseudonyms, audited without the value) and `pseudonym_of(context, userid)`. `translator::API_VERSION` = 2
+(0.3.0). `local_lticompletionsync` (receiver `identity_resolver`) uses exactly `context_for()` and `user_of()` behind
+`class_exists`/`method_exists` and treats every throwable as "unresolved" (fail closed); its use is compatible with 0.3.0
+(checked by reading `classes/local/receiver/identity_resolver.php` of local_lticompletionsync 0.2.0 work tree; the cases are
+T01 to T08 of the security protocol). Suggestion for that plugin: also check `API_VERSION >= 2`.
+
+## LTI 1.0/1.1 launches (setting `legacyprotocol`)
+
+The policies cover LTI 1.3 only (spec SP-L05: no new features for legacy protocols). An LTI 1.x launch carries the local id
+and everything the registration shares. Setting `legacyprotocol`: `pass` (default, behaviour of 0.2.0, written explicitly by
+the 0.3.0 upgrade step) lists such registrations in the overview as not covered; `refuse` refuses their launches (basic and
+deep linking) while the policy of their position is active. The guard never routes their service calls.
 
 ### Service proxy (SP-02)
 
@@ -164,6 +263,9 @@ no activity exists yet.
 
 Specification, enforced by `identity_continuity_test` on real core flows (the person is the same teacher or learner):
 
+Note: the site scope is chosen at the site level. A tool level row cannot select it, because the default scope is
+`deployment` and a lower level cannot be weaker (it is clamped and the editor rejects it).
+
 | Event | site | deployment | course | cm (activity) |
 |---|---|---|---|---|
 | Deep-linking request, then launch of the created activity | same | same | same | **different**: the request uses the course scope pseudonym, the launch the activity one |
@@ -222,11 +324,27 @@ its list of user columns and stays (append-only audit).
 
 ## Configuration
 
-Settings: `legacyenabled` (default off), `retireddays` (365). (`servicesmode` and the policy field `ackservices` of the 0.1.0 alpha do not exist in this component.)
+Settings: `legacyenabled` (default off), `legacyprotocol` (`pass` | `refuse`, default `pass`), `retireddays` (365). (`servicesmode` and the policy field `ackservices` of the 0.1.0 alpha do not exist in this component.)
 
-Installation and rename: 0.2.0 is the first release of `ltisource_ltipseudonym` (renamed by owner decision 2026-10-25; the former
-component name is recorded in docs/CHANGELOG.md and docs/NAMING.md). There is no upgrade path from the 0.1.0 alpha: uninstall the
-old plugin (its policies, mappings and audit rows are deleted), then install this one. `db/upgrade.php` has no steps.
+Upgrade: from 0.2.0 (`2026102502`) to 0.3.0 (`2026102700`) one step writes `legacyprotocol = pass` unless an administrator set
+it already; no schema change (`install_test::test_upgrade_from_2026102502`, `test_upgrade_keeps_an_existing_setting`).
+
+### Leaving the 0.1.0 alpha (`ltisource_scopedidentity`, audit SP-04)
+
+0.2.0 was renamed by owner decision; core has no upgrade path between two components. To keep the pseudonyms the tools know:
+
+1. Install `ltisource_ltipseudonym` while the old plugin is still installed. Both callbacks run in this window; core lists
+   ltisource plugins by name (`ksort()` in `core_component::fetch_plugins()`), so the old plugin's patch is merged last and
+   tools keep receiving the old pseudonym. A fresh install of this plugin has no policy and changes nothing yet.
+2. Dry run: `php mod/lti/source/ltipseudonym/cli/import_scopedidentity.php` (counts only, nothing written).
+3. `... --execute` (optionally `--policies`): copies the old mapping rows unchanged, raises the identity generations to the old
+   ones (retiring older active rows here, as a rotation does), never changes an existing row (conflicts are reported), skips
+   deleted users and missing registrations, writes one audit row with counts (no pseudonym). Idempotent.
+4. Check a launch, then uninstall the old plugin (this deletes its tables).
+
+Not imported: the old HMAC secret (the old derivation used another domain string, so it could not reproduce old tokens; every
+issued token is in the imported rows) and the old audit trail. Tests: `legacy_import_test` (fabricated old tables from the
+alpha's own install.xml).
 Internal config: `hmacsecret_v1` (encrypted), `generation_<typeid>`. Setting changes are audited by Moodle's config log;
 policy changes by the plugin's audit table and the `policy_changed` event.
 

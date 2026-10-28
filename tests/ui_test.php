@@ -187,4 +187,61 @@ final class ui_test extends \advanced_testcase {
         $this->assertStringContainsString('migrate.php', $html);
         $this->assertStringContainsString(get_string('orphansfound', 'ltisource_ltipseudonym', 2), $html);
     }
+
+    /**
+     * Finding SP-04: the overview states what a launch really carries per category and never says "removed" (absent) for a
+     * claim that core still sends: that is a refused launch. LTI 1.x registrations are listed as not covered.
+     */
+    public function test_overview_never_claims_removed_for_a_sent_claim(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $component = 'ltisource_ltipseudonym';
+        $sharing = testing\fixture::create_type(['lti_typename' => 'Sharing tool']);
+        $quiet = testing\fixture::create_type(
+            ['lti_sendname' => LTI_SETTING_NEVER, 'lti_sendemailaddr' => LTI_SETTING_NEVER, 'lti_typename' => 'Quiet tool']
+        );
+        $delegating = testing\fixture::create_type(['lti_sendname' => LTI_SETTING_DELEGATE, 'lti_typename' => 'Delegating tool']);
+        testing\fixture::create_type(['lti_ltiversion' => LTI_VERSION_1, 'lti_typename' => 'Old 1.1 tool']);
+        foreach ([$sharing, $quiet, $delegating] as $typeid) {
+            testing\fixture::set_policy(['typeid' => $typeid, 'pseudotype' => 'random_persisted', 'discname' => 'remove',
+                'discemail' => 'blank']);
+        }
+        testing\fixture::set_policy(['typeid' => 0, 'discname' => 'blank', 'allowoverride' => 1]);
+        $byid = array_column(overview_builder::build(), null, 'typeid');
+        $this->assertSame(['mode' => 'remove', 'effect' => 'refused'], $byid[$sharing]['effects']['name']);
+        $this->assertSame(['mode' => 'blank', 'effect' => 'sentempty'], $byid[$sharing]['effects']['email']);
+        $this->assertSame(['mode' => 'remove', 'effect' => 'absent'], $byid[$quiet]['effects']['name']);
+        $this->assertSame(['mode' => 'blank', 'effect' => 'notsent'], $byid[$quiet]['effects']['email']);
+        $this->assertSame(['mode' => 'remove', 'effect' => 'refusedmaybe'], $byid[$delegating]['effects']['name']);
+        $this->assertSame(['mode' => 'blank', 'effect' => 'depends'], $byid[0]['effects']['name']);
+        $this->assertArrayNotHasKey('picture', $byid[$sharing]['effects'], 'pass is not listed as a restriction');
+
+        $PAGE->set_url('/mod/lti/source/ltipseudonym/policy.php');
+        $html = $PAGE->get_renderer($component)->render_overview(new output\overview(overview_builder::build(), false, 0));
+        $line = fn($category, $mode, $effect) => s(get_string('effectline', $component, (object) [
+            'category' => get_string('disc:' . $category, $component),
+            'mode' => get_string('discshort:' . $mode, $component),
+            'effect' => get_string('effect:' . $effect, $component),
+        ]));
+        $this->assertStringContainsString($line('name', 'remove', 'refused'), $html);
+        $this->assertStringContainsString($line('name', 'remove', 'absent'), $html);
+        $this->assertStringContainsString($line('email', 'blank', 'sentempty'), $html);
+        $this->assertSame(1, substr_count($html, s(get_string('effect:absent', $component))), 'absent only for the quiet tool');
+        $this->assertStringContainsString(s(get_string('disclosureoutcomes', $component)), $html);
+        $this->assertStringContainsString('Old 1.1 tool', $html);
+        $this->assertStringContainsString(get_string('legacytypes:pass', $component, 'Old 1.1 tool'), $html);
+        set_config('legacyprotocol', 'refuse', $component);
+        $html = $PAGE->get_renderer($component)->render_overview(new output\overview(overview_builder::build(), false, 0));
+        $this->assertStringContainsString(get_string('legacytypes:refuse', $component, 'Old 1.1 tool'), $html);
+        foreach (['disclosureoutcomes', 'disclosureinfo'] as $key) {
+            foreach (['en', 'de'] as $lang) {
+                // The language files are read directly: the test site has no German language pack installed.
+                $string = [];
+                include(__DIR__ . '/../lang/' . $lang . '/ltisource_ltipseudonym.php');
+                $text = $string[$key];
+                $this->assertGreaterThanOrEqual(3, substr_count(strtolower($text), $lang === 'en' ? 'remove' : 'entfernen') +
+                    substr_count(strtolower($text), $lang === 'en' ? 'refuse' : 'ablehn'), $key . ' ' . $lang);
+            }
+        }
+    }
 }

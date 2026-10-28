@@ -83,6 +83,9 @@ test.describe.serial('Pseudonym: sub received by B', () => {
 
   test('pseudonymised sub is not the local id and is stable on relaunch (the tool has AGS and NRPS)', async ({ browser }) => {
     setPolicy('random_persisted', 'deployment');
+    // The stack is shared: other suites launch the same student without a policy, so a binding with the local id may exist
+    // already. What counts is that THIS launch created none.
+    const before = bindings();
     const first = await launchAs(browser, 'studentA1');
     const sub = pseudonymOf(first.localId);
     // The tool received exactly the pseudonym of the mapping table, never the local id. (The mapping may exist from an
@@ -91,7 +94,8 @@ test.describe.serial('Pseudonym: sub received by B', () => {
     expect(sub).not.toBe(String(first.localId));
     expect(sub.length).toBeGreaterThanOrEqual(22);
     expect(bindings()).toContain(sub);
-    expect(bindings().filter((s) => s === String(first.localId))).toEqual([]);
+    const added = bindings().filter((s) => !before.includes(s));
+    expect(added.filter((s) => s === String(first.localId))).toEqual([]);
     const afterFirst = bindings();
     await launchAs(browser, 'studentA1');
     expect(bindings()).toEqual(afterFirst);

@@ -37,3 +37,29 @@ Feature: Pseudonym policy administration
     And I am on site homepage
     Then I should not see "Site administration"
     And I should not see "Pseudonym policies"
+
+  Scenario: Remove is shown as absent only where the tool does not share the claim, and LTI 1.x tools as not covered
+    Given the following "mod_lti > tool types" exist:
+      | name         | lti_typename | baseurl                          | lti_ltiversion | lti_sendname | lti_coursevisible |
+      | Quiet tool   | Quiet tool   | https://quiet.example.com/launch | 1.3.0          | 0            | 1                 |
+      | Sharing tool | Sharing tool | https://share.example.com/launch | 1.3.0          | 1            | 1                 |
+      | Old tool     | Old tool     | https://old.example.com/launch   | LTI-1p0        | 1            | 1                 |
+    And I log in as "admin"
+    And I visit "/mod/lti/source/ltipseudonym/policy.php"
+    Then I should see "Not covered by the policies (LTI 1.0/1.1/2.0): Old tool"
+    And I should see "What a tool receives per category. Pass:"
+    When I click on "Edit" "link" in the "Sharing tool" "table_row"
+    And I set the field "Pseudonym type" to "Random token (persisted) - Identifiability: low"
+    And I set the field "Names" to "Remove (claim absent; the launch is refused while Moodle core still builds it)"
+    And I set the field "I understand that this changes the identity delivered to the tool" to "1"
+    And I press "Save changes"
+    Then I should see "Removal is impossible: the tool registration makes Moodle core send this claim"
+    And I visit "/mod/lti/source/ltipseudonym/policy.php"
+    And I click on "Edit" "link" in the "Quiet tool" "table_row"
+    And I set the field "Pseudonym type" to "Random token (persisted) - Identifiability: low"
+    And I set the field "Names" to "Remove (claim absent; the launch is refused while Moodle core still builds it)"
+    And I set the field "I understand that this changes the identity delivered to the tool" to "1"
+    And I press "Save changes"
+    And I visit "/mod/lti/source/ltipseudonym/policy.php"
+    Then I should see "Names: remove, absent (the tool registration does not share it)" in the "Quiet tool" "table_row"
+    And I should not see "Names: remove" in the "Sharing tool" "table_row"

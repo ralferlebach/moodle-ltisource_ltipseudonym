@@ -73,6 +73,7 @@ class results extends \ltiservice_gradebookservices\local\resources\results {
                 }
             }
             parent::execute($response);
+            $this->normalise_code($response);
             if ($ctx !== null && $response->get_code() === 200) {
                 $response->set_body($empty ? '[]' : $translator->filter_results($ctx, $response->get_body()));
             }
